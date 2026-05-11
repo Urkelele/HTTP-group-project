@@ -65,7 +65,7 @@ public class ClientCLI {
     private static String[] promptRequest() 
     {
         // METHOD
-        System.out.print(BOLD + "Method" + RESET + " [GET/POST/PUT/DELETE/HEAD] (or 'exit'): ");
+        System.out.print(BOLD + "Method" + RESET + " [GET/POST/PUT/DELETE] (or 'exit'): ");
         String method = scanner.nextLine().trim().toUpperCase();
 
         if (method.equals("EXIT") || method.equals("QUIT")) return null;
