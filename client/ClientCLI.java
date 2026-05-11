@@ -2,6 +2,9 @@ package client;
 
 import java.io.FileOutputStream;
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.*;
 
 /*
@@ -117,7 +120,28 @@ public class ClientCLI {
         HttpResponse res;
         try 
         {
-            res = client.request(method, url, headers, body);
+            boolean isImageUpload = method.equalsIgnoreCase("POST") && url.contains("/cover") && headers.containsKey("Content-Type") && headers.get("Content-Type").startsWith("image/");
+
+            if (isImageUpload)
+            {
+                Path filePath = Path.of(body);
+
+                if (!Files.exists(filePath)) {
+                    throw new RuntimeException("File not found: " + filePath);
+                }
+
+                byte[] fileBytes = Files.readAllBytes(filePath);
+
+                res = client.request(method, url, headers, fileBytes);
+            }
+            else
+            {
+                byte[] bodyBytes;
+                if (body != null && !body.isEmpty()) bodyBytes = body.getBytes(StandardCharsets.UTF_8);
+                else bodyBytes = new byte[0];
+                
+                res = client.request(method, url, headers, bodyBytes);
+            }
         } 
         catch (Exception e) 
         {

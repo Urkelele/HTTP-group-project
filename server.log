@@ -1,0 +1,8 @@
+[2026-05-11 13:48:27] INFO Server started on port 8080
+[2026-05-11 13:48:27] INFO Static files served from ./static/
+[2026-05-11 13:48:27] INFO Press Ctrl+C to stop
+[2026-05-11 13:48:42] INFO GET /games/5/cover | 200 | 27ms | 14598 bytes
+[2026-05-11 13:48:51] INFO Cover deleted for game [5]
+[2026-05-11 13:48:51] INFO DELETE /games/5/cover | 200 | 5ms | 0 bytes
+[2026-05-11 13:49:19] INFO Cover uploaded for game [5] -> stardew.png
+[2026-05-11 13:49:19] INFO POST /games/5/cover | 200 | 28ms | 0 bytes

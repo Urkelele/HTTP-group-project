@@ -25,14 +25,14 @@ public class HttpClient {
      * @param method  HTTP verb (GET, POST, PUT, DELETE, HEAD, ...)
      * @param url     Full URL, e.g. "http://example.com/cats" or "http://localhost:8080/games"
      * @param headers Additional headers (can be null)
-     * @param body    Request body as string (can be null or empty)
+     * @param body    Request body as byte array (can be null or empty)
      */
-    public HttpResponse request(String method, String url, Map<String, String> headers, String body) throws Exception 
+    public HttpResponse request(String method, String url, Map<String, String> headers, byte[] bodyBytes) throws Exception
     {
-        return requestInternal(method, url, headers, body, 0);
+        return requestInternal(method, url, headers, bodyBytes, 0);
     }
 
-    private HttpResponse requestInternal(String method, String url, Map<String, String> headers, String body, int redirectCount) throws Exception 
+    private HttpResponse requestInternal(String method, String url, Map<String, String> headers, byte[] bodyBytes, int redirectCount) throws Exception 
     {
         if (redirectCount > MAX_REDIRECTS) throw new IOException("Too many redirects");
 
@@ -71,11 +71,6 @@ public class HttpClient {
             host = hostPort;
             port = 80; // 80 = HTTP default port
         }
-
-        // Build request
-        byte[] bodyBytes;
-        if (body != null && !body.isEmpty()) bodyBytes = body.getBytes(StandardCharsets.UTF_8);
-        else bodyBytes = new byte[0];
 
         StringBuilder reqBuilder = new StringBuilder();
         reqBuilder.append(method.toUpperCase()).append(" ").append(path).append(" HTTP/1.1\r\n");
@@ -129,7 +124,8 @@ public class HttpClient {
             socketOut.write(reqBuilder.toString().getBytes(StandardCharsets.US_ASCII));
             if (bodyBytes.length > 0) 
             {
-                socketOut.write(bodyBytes);
+                socketOut.write(bodyBytes, 0, bodyBytes.length);
+                socketOut.flush();
             }
             socketOut.flush();
 
