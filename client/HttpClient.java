@@ -191,8 +191,9 @@ public class HttpClient {
             }
         }
 
-        // Read body as text
-        res.body = readBody(data, res.headers);
+        // Read body
+        res.bodyBytes = readBody(data, res.headers);
+        res.body = new String(res.bodyBytes, StandardCharsets.UTF_8);
 
         return res;
     }
@@ -215,34 +216,31 @@ public class HttpClient {
         return buf.size() > 0 ? buf.toString(StandardCharsets.US_ASCII) : null;
     }
 
-    // Reads the response body using Content-Length. Falls back until EOF if not present.
-    // Returns the body as a string.
-    private String readBody(InputStream in, Map<String, String> headers) throws IOException {
+    // Reads the response body using Content-Length or chunked transfer encoding. Falls back until EOF if not present.
+    private byte[] readBody(InputStream in, Map<String, String> headers) throws IOException {
         String contentLength = getHeader(headers, "Content-Length");
-        if (contentLength != null) 
-        {
+        if (contentLength != null) {
             int length = Integer.parseInt(contentLength.trim());
-            if (length == 0) return "";
+            if (length == 0) return new byte[0];
             byte[] buf = new byte[length];
             int read = 0;
-            while (read < length) 
-            {
+            while (read < length) {
                 int n = in.read(buf, read, length - read);
                 if (n == -1) break;
                 read += n;
             }
-            return new String(buf, StandardCharsets.UTF_8);
+            return buf;
         }
 
         // Check Transfer-Encoding: chunked
         String transferEncoding = getHeader(headers, "Transfer-Encoding");
         if (transferEncoding != null && transferEncoding.equalsIgnoreCase("chunked")) 
         {
-            return new String(readChunked(in), StandardCharsets.UTF_8);
+            return readChunked(in);
         }
 
         // Fallback: read until EOF
-        return new String(in.readAllBytes(), StandardCharsets.UTF_8);
+        return in.readAllBytes();
     }
 
     /*

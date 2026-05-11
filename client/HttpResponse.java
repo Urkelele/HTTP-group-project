@@ -8,6 +8,7 @@ public class HttpResponse {
     public String statusText;
     public String httpVersion;
     public Map<String, String> headers = new LinkedHashMap<>();
+    public byte[] bodyBytes = new byte[0];
     public String body = "";
     
     public boolean isSuccess() 

@@ -1,5 +1,7 @@
 package client;
 
+import java.io.FileOutputStream;
+import java.io.IOException;
 import java.util.*;
 
 /*
@@ -140,11 +142,11 @@ public class ClientCLI {
 
         // Body
         System.out.println(BOLD + "Body    " + RESET);
-        if (res.body.isEmpty()) 
+        if (res.bodyBytes.length == 0) 
         {
             System.out.println(DIM + "  (empty)" + RESET);
-        } 
-        else 
+        }
+        else if (isTextContent(res.getContentType())) 
         {
             String displayed = res.body.trim();
             if (res.getContentType().contains("json")) 
@@ -152,6 +154,30 @@ public class ClientCLI {
                 displayed = prettyJson(displayed);
             }
             System.out.println(displayed);
+        } 
+        else 
+        {
+            System.out.println(DIM + "  [Binary data: " + res.bodyBytes.length + " bytes, Content-Type: " + res.getContentType() + "]" + RESET);
+        
+            if (!isTextContent(res.getContentType()) && res.bodyBytes.length > 0) 
+            {
+                String filename = "outputMedia";
+
+                if (res.getContentType().contains("png")) filename += ".png";
+                else if (res.getContentType().contains("jpeg")) filename += ".jpg";
+                else if (res.getContentType().contains("webp")) filename += ".webp";
+                else filename += ".bin";
+
+                try (FileOutputStream fos = new FileOutputStream(filename)) 
+                {
+                    fos.write(res.bodyBytes);
+                    System.out.println("Saved binary response to " + filename);
+                } 
+                catch (IOException e) 
+                {
+                    System.out.println("Error saving file: " + e.getMessage());
+                }
+            }
         }
 
         System.out.println(BOLD + "---------------------------" + RESET);
@@ -193,6 +219,12 @@ public class ClientCLI {
         if (code >= 200 && code < 300) return GREEN;
         if (code >= 300 && code < 400) return YELLOW;
         return RED;
+    }
+
+    private static boolean isTextContent(String contentType) 
+    {
+        if (contentType == null || contentType.isEmpty()) return true;
+        return contentType.contains("text") || contentType.contains("json") || contentType.contains("xml") || contentType.contains("html");
     }
 
     // AI-assisted code for UI
