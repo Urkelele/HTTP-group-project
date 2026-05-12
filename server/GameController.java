@@ -73,11 +73,11 @@ public class GameController {
     public GameController() 
     {
         // Init data
-        addSample("The Legend of Zelda: Breath of the Wild", "Adventure",  "Nintendo Switch", 59.99, 2017, "zelda.png");
-        addSample("Elden Ring", "RPG", "PC / PS5 / Xbox", 49.99, 2022, "eldenring.png");
-        addSample("Red Dead Redemption 2", "Action", "PC / PS4 / Xbox", 39.99, 2018, "rdr2.png");
-        addSample("Hollow Knight", "Metroidvania","PC / Switch", 14.99, 2017, "hollowknight.png");
-        addSample("Stardew Valley", "Simulation", "PC / Switch", 9.99, 2016, "stardew.png");
+        addSample("The Legend of Zelda: Breath of the Wild", "Adventure",  "Nintendo Switch", 59.99, 2017, "zelda");
+        addSample("Elden Ring", "RPG", "PC / PS5 / Xbox", 49.99, 2022, "eldenring");
+        addSample("Red Dead Redemption 2", "Action", "PC / PS4 / Xbox", 39.99, 2018, "rdr2");
+        addSample("Hollow Knight", "Metroidvania","PC / Switch", 14.99, 2017, "hollowknight");
+        addSample("Stardew Valley", "Simulation", "PC / Switch", 9.99, 2016, "stardew");
 
         // Create covers directory if not exist
         try { Files.createDirectories(Path.of(COVERS_DIR)); }
@@ -270,9 +270,9 @@ public class GameController {
             );
         }
 
-        Path coverPath = Path.of(COVERS_DIR + game.cover);
+        Path coverPath = findCoverFile(game.cover);
 
-        if (!Files.exists(coverPath)) {
+        if (coverPath == null) {
             return res.status(404).json(
                 "{\"error\":\"Cover image not found\"}"
             );
@@ -282,7 +282,7 @@ public class GameController {
 
             byte[] bytes = Files.readAllBytes(coverPath);
 
-            String mime = MimeTypes.forFile(game.cover);
+            String mime = MimeTypes.forFile(coverPath.getFileName().toString());
 
             return res.status(200).binary(bytes, mime);
 
@@ -328,10 +328,7 @@ public class GameController {
 
         // Extract extension from MIME type
         String extension = contentType.substring("image/".length());
-
-        // Use the existing game cover filename
-        String coverNameWithoutExtension = game.cover.split("\\.")[0];
-        String filename = coverNameWithoutExtension + "." + extension;
+        String filename = game.cover + "." + extension;
 
         if (filename == null || filename.isBlank()) {
             return res.status(400).json(
@@ -343,6 +340,8 @@ public class GameController {
 
         try {
 
+            // Delete cover if it already exists
+            deleteExistingCoverFiles(game.cover);
             // Save image to disk, make sure data from older files is not present
             Files.write(savePath, req.bodyBytes, java.nio.file.StandardOpenOption.CREATE, java.nio.file.StandardOpenOption.TRUNCATE_EXISTING);
 
@@ -356,9 +355,6 @@ public class GameController {
         }
 
         Logger.info("Cover uploaded for game [" + game.id + "] -> " + filename);
-
-        // Update cover path
-        game.cover = filename;
 
         return res.status(200).json(
             "{"
@@ -405,6 +401,37 @@ public class GameController {
         Logger.info("Cover deleted for game [" + game.id + "]");
 
         return res.status(200).json("{\"message\":\"Cover deleted\"}");
+    }
+
+    private Path findCoverFile(String coverBaseName)
+    {
+        String[] extensions = {".png",".jpg",".jpeg",".webp"};
+
+        for (String ext : extensions)
+        {
+            Path path = Path.of(COVERS_DIR + coverBaseName + ext);
+
+            if (Files.exists(path))
+            {
+                return path;
+            }
+        }
+
+        return null;
+    }
+
+    private void deleteExistingCoverFiles(String coverBaseName)
+    {
+        String[] extensions = {".png",".jpg",".jpeg",".webp"};
+
+        for (String ext : extensions)
+        {
+            try
+            {
+                Files.deleteIfExists(Path.of(COVERS_DIR + coverBaseName + ext));
+            }
+            catch (IOException ignored) {}
+        }
     }
 
     // Helpers
