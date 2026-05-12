@@ -45,21 +45,29 @@ public class Router {
     }
 
     private boolean matches(String path, String pattern) {
-        // Strip query string before matching
+
+        String cleanPath;
+
+        // Remove query string
         int queryIndex = path.indexOf('?');
-        String cleanPath = path;
         if(queryIndex != -1)
         {
             cleanPath = path.substring(0, queryIndex);
         } 
-
-        if (pattern.endsWith("/*")) {
-            String base = pattern.substring(0, pattern.length() - 2);
-            // Matches /base/anything but NOT /base alone (use separate exact route for that)
-            return cleanPath.startsWith(base + "/");
+        else
+        {
+            cleanPath = path;
         }
 
-        return cleanPath.equals(pattern);
+        // Exact match
+        if (!pattern.contains("*")) {
+            return cleanPath.equals(pattern);
+        }
+
+        // Wildcard match
+        String regex = pattern.replace("/", "\\/").replace("*", "[^/]+");
+
+        return cleanPath.matches(regex);
     }
 
     // Collects all methods registered for a given path

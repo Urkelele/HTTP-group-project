@@ -53,14 +53,20 @@ public class HttpClient {
     }
 
 
-    // Entry point
-    // Sends an HTTP request and returns the parsed response.
-    public HttpResponse request(String method, String url, Map<String, String> headers, String body) throws Exception 
+    /**
+     * Entry point
+     * Sends an HTTP request and returns the parsed response.
+     * method - get, post, put, delete
+     * url - Full URL
+     * headers - Additional headers
+     * bodyBytes - Request body as byte array
+     */
+    public HttpResponse request(String method, String url, Map<String, String> headers, byte[] bodyBytes) throws Exception
     {
-        return requestInternal(method, url, headers, body, 0);
+        return requestInternal(method, url, headers, bodyBytes, 0);
     }
 
-    private HttpResponse requestInternal(String method, String url, Map<String, String> headers, String body, int redirectCount) throws Exception 
+    private HttpResponse requestInternal(String method, String url, Map<String, String> headers, byte[] bodyBytes, int redirectCount) throws Exception 
     {
         if (redirectCount > MAX_REDIRECTS) throw new IOException("Too many redirects");
 
@@ -99,11 +105,6 @@ public class HttpClient {
             host = hostPort;
             port = 80; // 80 = HTTP default port
         }
-
-        // Build request
-        byte[] bodyBytes;
-        if (body != null && !body.isEmpty()) bodyBytes = body.getBytes(StandardCharsets.UTF_8);
-        else bodyBytes = new byte[0];
 
         StringBuilder reqBuilder = new StringBuilder();
         reqBuilder.append(method.toUpperCase()).append(" ").append(path).append(" HTTP/1.1\r\n");
@@ -164,7 +165,8 @@ public class HttpClient {
             socketOut.write(reqBuilder.toString().getBytes(StandardCharsets.US_ASCII));
             if (bodyBytes.length > 0) 
             {
-                socketOut.write(bodyBytes);
+                socketOut.write(bodyBytes, 0, bodyBytes.length);
+                socketOut.flush();
             }
             socketOut.flush();
 
@@ -235,8 +237,9 @@ public class HttpClient {
             }
         }
 
-        // Read body as text
-        res.body = readBody(data, res.headers);
+        // Read body
+        res.bodyBytes = readBody(data, res.headers);
+        res.body = new String(res.bodyBytes, StandardCharsets.UTF_8);
 
         return res;
     }
@@ -259,34 +262,31 @@ public class HttpClient {
         return buf.size() > 0 ? buf.toString(StandardCharsets.US_ASCII) : null;
     }
 
-    // Reads the response body using Content-Length. Falls back until EOF if not present.
-    // Returns the body as a string.
-    private String readBody(InputStream in, Map<String, String> headers) throws IOException {
+    // Reads the response body using Content-Length or chunked transfer encoding. Falls back until EOF if not present.
+    private byte[] readBody(InputStream in, Map<String, String> headers) throws IOException {
         String contentLength = getHeader(headers, "Content-Length");
-        if (contentLength != null) 
-        {
+        if (contentLength != null) {
             int length = Integer.parseInt(contentLength.trim());
-            if (length == 0) return "";
+            if (length == 0) return new byte[0];
             byte[] buf = new byte[length];
             int read = 0;
-            while (read < length) 
-            {
+            while (read < length) {
                 int n = in.read(buf, read, length - read);
                 if (n == -1) break;
                 read += n;
             }
-            return new String(buf, StandardCharsets.UTF_8);
+            return buf;
         }
 
         // Check Transfer-Encoding: chunked
         String transferEncoding = getHeader(headers, "Transfer-Encoding");
         if (transferEncoding != null && transferEncoding.equalsIgnoreCase("chunked")) 
         {
-            return new String(readChunked(in), StandardCharsets.UTF_8);
+            return readChunked(in);
         }
 
         // Fallback: read until EOF
-        return new String(in.readAllBytes(), StandardCharsets.UTF_8);
+        return in.readAllBytes();
     }
 
     /*

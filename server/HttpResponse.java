@@ -6,7 +6,13 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
-
+/**
+ * Simple HTTP response builder.
+ *
+ * Usage:
+ *   return new HttpResponse().status(200).json("{\"ok\":true}");
+ *   return new HttpResponse().status(404).text("Not found");
+ */
 public class HttpResponse {
 
     private int statusCode = 200;
@@ -18,6 +24,9 @@ public class HttpResponse {
     // Set-Cookie headers stored separately because there can be multiple
     // (a Map can't hold duplicate keys, so cookies need their own list)
     private final List<String> cookies = new ArrayList<>();
+    
+    // Body stored as raw bytes (works for text AND binary/multimedia)
+    private byte[] bodyBytes = new byte[0];
 
     //Body stored only as plain text
     private String body = "";
@@ -91,6 +100,16 @@ public class HttpResponse {
         return this;
     }
 
+    /**
+     * Set a binary body (images, etc.) 
+     * @param data        raw bytes
+     * @param mimeType    e.g. "image/png", "image/jpeg"
+     */
+    public HttpResponse binary(byte[] data, String mimeType) {
+        this.bodyBytes = data;
+        headers.put("Content-Type", mimeType);
+        return this;
+    }
 
     //Accessors
     public int getStatusCode() {
@@ -98,7 +117,7 @@ public class HttpResponse {
     }
 
     public int getBodyLength() {
-        return body.getBytes(StandardCharsets.UTF_8).length;
+        return bodyBytes.length;
     }
 
     //Serialise to bytes
@@ -106,20 +125,24 @@ public class HttpResponse {
     //Builds the full HTTP response as a byte array ready to write to the socket.
     public byte[] toBytes() {
 
-        byte[] bodyBytes = body.getBytes(StandardCharsets.UTF_8);
+        byte[] finalBody;
 
-        //Required HTTP headers
-        headers.put("Content-Length", String.valueOf(bodyBytes.length));
+        // Use binary body if present
+        if (bodyBytes != null && bodyBytes.length > 0)
+        {
+            finalBody = bodyBytes;
+        }
+        else
+        {
+            finalBody = body.getBytes(StandardCharsets.UTF_8);
+        }
+
+        headers.put("Content-Length", String.valueOf(finalBody.length));
         headers.put("Server", "mini-http-server/1.0");
 
-        //Build header section
         StringBuilder sb = new StringBuilder();
 
-        sb.append("HTTP/1.1 ")
-          .append(statusCode)
-          .append(" ")
-          .append(statusText)
-          .append("\r\n");
+        sb.append("HTTP/1.1 ").append(statusCode).append(" ").append(statusText).append("\r\n");
 
         headers.forEach((k, v) ->
             sb.append(k).append(": ").append(v).append("\r\n")
@@ -134,12 +157,12 @@ public class HttpResponse {
 
         byte[] headerBytes = sb.toString().getBytes(StandardCharsets.US_ASCII);
 
-        // Combine headers + body
-        byte[] full = new byte[headerBytes.length + bodyBytes.length];
+        byte[] full = new byte[headerBytes.length + finalBody.length];
 
         System.arraycopy(headerBytes, 0, full, 0, headerBytes.length);
-        System.arraycopy(bodyBytes, 0, full, headerBytes.length, bodyBytes.length);
+        System.arraycopy(finalBody, 0, full, headerBytes.length, finalBody.length);
 
         return full;
+
     }
 }

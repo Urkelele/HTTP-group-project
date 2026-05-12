@@ -1,5 +1,10 @@
 package client;
 
+import java.io.FileOutputStream;
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.*;
 
 /*
@@ -115,7 +120,28 @@ public class ClientCLI {
         HttpResponse res;
         try 
         {
-            res = client.request(method, url, headers, body);
+            boolean isImageUpload = method.equalsIgnoreCase("POST") && url.contains("/cover") && headers.containsKey("Content-Type") && headers.get("Content-Type").startsWith("image/");
+
+            if (isImageUpload)
+            {
+                Path filePath = Path.of(body);
+
+                if (!Files.exists(filePath)) {
+                    throw new RuntimeException("File not found: " + filePath);
+                }
+
+                byte[] fileBytes = Files.readAllBytes(filePath);
+
+                res = client.request(method, url, headers, fileBytes);
+            }
+            else
+            {
+                byte[] bodyBytes;
+                if (body != null && !body.isEmpty()) bodyBytes = body.getBytes(StandardCharsets.UTF_8);
+                else bodyBytes = new byte[0];
+                
+                res = client.request(method, url, headers, bodyBytes);
+            }
         } 
         catch (Exception e) 
         {
@@ -146,11 +172,11 @@ public class ClientCLI {
 
         // Body
         System.out.println(BOLD + "Body    " + RESET);
-        if (res.body.isEmpty()) 
+        if (res.bodyBytes.length == 0) 
         {
             System.out.println(DIM + "  (empty)" + RESET);
-        } 
-        else 
+        }
+        else if (isTextContent(res.getContentType())) 
         {
             String displayed = res.body.trim();
             if (res.getContentType().contains("json")) 
@@ -158,6 +184,30 @@ public class ClientCLI {
                 displayed = prettyJson(displayed);
             }
             System.out.println(displayed);
+        } 
+        else 
+        {
+            System.out.println(DIM + "  [Binary data: " + res.bodyBytes.length + " bytes, Content-Type: " + res.getContentType() + "]" + RESET);
+        
+            if (!isTextContent(res.getContentType()) && res.bodyBytes.length > 0) 
+            {
+                String filename = "outputMedia";
+
+                if (res.getContentType().contains("png")) filename += ".png";
+                else if (res.getContentType().contains("jpeg")) filename += ".jpg";
+                else if (res.getContentType().contains("webp")) filename += ".webp";
+                else filename += ".bin";
+
+                try (FileOutputStream fos = new FileOutputStream(filename)) 
+                {
+                    fos.write(res.bodyBytes);
+                    System.out.println("Saved binary response to " + filename);
+                } 
+                catch (IOException e) 
+                {
+                    System.out.println("Error saving file: " + e.getMessage());
+                }
+            }
         }
 
         System.out.println(BOLD + "---------------------------" + RESET);
@@ -199,6 +249,12 @@ public class ClientCLI {
         if (code >= 200 && code < 300) return GREEN;
         if (code >= 300 && code < 400) return YELLOW;
         return RED;
+    }
+
+    private static boolean isTextContent(String contentType) 
+    {
+        if (contentType == null || contentType.isEmpty()) return true;
+        return contentType.contains("text") || contentType.contains("json") || contentType.contains("xml") || contentType.contains("html");
     }
 
     // AI-assisted code for UI

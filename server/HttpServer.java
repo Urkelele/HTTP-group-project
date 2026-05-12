@@ -127,6 +127,7 @@ public class HttpServer {
             if (length > 0) 
             {
                 byte[] buffer = in.readNBytes(length);
+                req.bodyBytes = buffer;
                 req.body = new String(buffer, StandardCharsets.UTF_8);
             }
         }
