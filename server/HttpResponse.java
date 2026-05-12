@@ -1,7 +1,9 @@
 package server;
 
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 
 
@@ -12,6 +14,10 @@ public class HttpResponse {
 
     //Preserve insertion order so headers print correctly
     private final Map<String, String> headers = new LinkedHashMap<>();
+
+    // Set-Cookie headers stored separately because there can be multiple
+    // (a Map can't hold duplicate keys, so cookies need their own list)
+    private final List<String> cookies = new ArrayList<>();
 
     //Body stored only as plain text
     private String body = "";
@@ -65,8 +71,28 @@ public class HttpResponse {
         return this;
     }
 
-    //Accessors
+    // Cookies
+    // Adds a Set-Cookie header to the response.
+    // path is the Path scope, e.g. "/" means the cookie is sent for all paths. Use "/games" to restrict it to the games section only.
+    public HttpResponse setCookie(String name, String value, int maxAge, String path) {
+        StringBuilder cookie = new StringBuilder();
+        cookie.append(name).append("=").append(value);
+        cookie.append("; Path=").append(path);
+ 
+        if (maxAge > 0) {
+            cookie.append("; Max-Age=").append(maxAge);
+        } else if (maxAge < 0) {
+            // Negative maxAge = tell the browser to delete the cookie
+            cookie.append("; Max-Age=0");
+        }
+        // maxAge == 0 is session cookie, no Max-Age attribute added
+ 
+        cookies.add(cookie.toString());
+        return this;
+    }
 
+
+    //Accessors
     public int getStatusCode() {
         return statusCode;
     }
@@ -98,6 +124,11 @@ public class HttpResponse {
         headers.forEach((k, v) ->
             sb.append(k).append(": ").append(v).append("\r\n")
         );
+
+        // One Set-Cookie line per cookie (can't be merged into one line)
+        for (String cookie : cookies) {
+            sb.append("Set-Cookie: ").append(cookie).append("\r\n");
+        }
 
         sb.append("\r\n");
 

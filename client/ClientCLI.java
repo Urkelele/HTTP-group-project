@@ -8,7 +8,7 @@ import java.util.*;
  * Suports:
  * - Prompts user for method, URL, headers, and body.
  * - Sends request using HttpClient and displays response status, headers, and body.
- * - Supports GET, POST, PUT, DELETE, HEAD methods.
+ * - Supports GET, POST, PUT, DELETE methods.
  */
 
 public class ClientCLI {
@@ -138,6 +138,12 @@ public class ClientCLI {
             System.out.println("  " + CYAN + entry.getKey() + RESET + ": " + entry.getValue());
         }
 
+        // Show Set-Cookie headers separately so they're visible
+        for (String sc : res.setCookieHeaders) {
+            System.out.println("  " + CYAN + "Set-Cookie" + RESET + ": " + sc);
+        }
+
+
         // Body
         System.out.println(BOLD + "Body    " + RESET);
         if (res.body.isEmpty()) 
@@ -180,7 +186,7 @@ public class ClientCLI {
 
     private static boolean isValidMethod(String m) 
     {
-        return Set.of("GET", "POST", "PUT", "DELETE", "HEAD", "PATCH", "OPTIONS").contains(m);
+        return Set.of("GET", "POST", "PUT", "DELETE").contains(m);
     }
 
     private static boolean methodHasBody(String m) 
@@ -237,7 +243,7 @@ public class ClientCLI {
         System.out.println("    help         → show this message");
         System.out.println();
         System.out.println("  Sending a request:");
-        System.out.println("    1. Enter method:  GET, POST, PUT, DELETE, HEAD");
+        System.out.println("    1. Enter method:  GET, POST, PUT, DELETE");
         System.out.println("    2. Enter URL:      http://example.com/resource");
         System.out.println("    3. Enter headers:  Content-Type:application/json, X-Api-Key:secret");
         System.out.println("       (comma-separated key:value pairs, or press Enter to skip)");

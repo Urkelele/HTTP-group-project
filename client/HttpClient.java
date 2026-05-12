@@ -9,24 +9,52 @@ import java.util.*;
  * HTTP/1.1 client library
  *
  * Supports:
- *   - GET, HEAD, POST, PUT, DELETE
+ *   - GET, POST, PUT, DELETE
  *   - Custom headers
  *   - Request body (text / JSON)
  *   - Redirects (3xx follow)
+ *   - Cookie storage and automatic sending
  */
 public class HttpClient {
 
     public static final int MAX_REDIRECTS = 10; // Usually HTTP clients cap at 5-20 redirects
 
-    /**
-     * Entry point
-     * Sends an HTTP request and returns the parsed response.
-     *
-     * @param method  HTTP verb (GET, POST, PUT, DELETE, HEAD, ...)
-     * @param url     Full URL, e.g. "http://example.com/cats" or "http://localhost:8080/games"
-     * @param headers Additional headers (can be null)
-     * @param body    Request body as string (can be null or empty)
-     */
+    // Cookies
+    // Each host has their own list of cookies and path scoping restricts which
+    // cookies are sent with each request.
+    private final Map<String, List<StoredCookie>> cookieStore = new LinkedHashMap<>();
+
+    // Represents one stored cookie with all its attributes.
+    private static class StoredCookie {
+        String name;
+        String value;
+        String path;
+        long expiresAt;  
+ 
+        StoredCookie(String name, String value, String path, long expiresAt) {
+            this.name = name;
+            this.value = value;
+            this.path = path;
+            this.expiresAt = expiresAt;
+        }
+ 
+        // Returns true if this cookie should be sent for the given request path. 
+        boolean matchesPath(String requestPath) {
+            // Path scoping cookie path must be a prefix of the request path
+            if (path == null || path.equals("/")) return true;
+            return requestPath.startsWith(path);
+        }
+ 
+        // Returns true if the cookie has not yet expired. 
+        boolean isAlive() {
+            if (expiresAt == -1) return true;
+            return System.currentTimeMillis() < expiresAt;
+        }
+    }
+
+
+    // Entry point
+    // Sends an HTTP request and returns the parsed response.
     public HttpResponse request(String method, String url, Map<String, String> headers, String body) throws Exception 
     {
         return requestInternal(method, url, headers, body, 0);
@@ -118,6 +146,13 @@ public class HttpClient {
             }
         }
 
+        // Cookies
+        String cookieHeader = buildCookieHeader(host, path);
+        if (!cookieHeader.isEmpty()) 
+        {
+            reqBuilder.append("Cookie: ").append(cookieHeader).append("\r\n");
+        }
+
         reqBuilder.append("\r\n"); // blank line = end of headers
 
         // Open TCP socket and send 
@@ -135,6 +170,9 @@ public class HttpClient {
 
             // Read response 
             HttpResponse response = parseResponse(socketIn);
+
+            // Store any Set-Cookie headers
+            storeCookies(host, response);
 
             // Follow redirects
             if (response.statusCode >= 300 && response.statusCode < 400) 
@@ -187,7 +225,13 @@ public class HttpClient {
             {
                 String key = line.substring(0, colon).trim();
                 String value = line.substring(colon + 1).trim();
-                res.headers.put(key, value);
+
+                // For Set-Cookie we keep ALL occurrences in a separate list
+                if (key.equalsIgnoreCase("Set-Cookie")) {
+                    res.setCookieHeaders.add(value);
+                } else {
+                    res.headers.put(key, value);
+                }
             }
         }
 
@@ -279,5 +323,88 @@ public class HttpClient {
             if (e.getKey().equalsIgnoreCase(name)) return e.getValue();
         }
         return null;
+    }
+
+    // Cookie helpers
+ 
+    // Builds the Cookie header value for a request to host + path.
+    private String buildCookieHeader(String host, String requestPath) {
+        List<StoredCookie> hostCookies = cookieStore.get(host);
+        if (hostCookies == null || hostCookies.isEmpty()) return "";
+ 
+        StringBuilder sb = new StringBuilder();
+        for (StoredCookie cookie : hostCookies) {
+            if (cookie.isAlive() && cookie.matchesPath(requestPath)) {
+                if (sb.length() > 0) sb.append("; ");
+                sb.append(cookie.name).append("=").append(cookie.value);
+            }
+        }
+        return sb.toString();
+    }
+ 
+    // Parses all Set-Cookie headers from a response and stores them.
+    // Path restricts which requests get this cookie
+    // Max-Age are seconds until it expires (0 = delete, absent = session cookie)
+    private void storeCookies(String host, HttpResponse response) {
+        for (String header : response.setCookieHeaders) {
+            parseAndStoreCookie(host, header);
+        }
+    }
+ 
+    private void parseAndStoreCookie(String host, String headerValue) {
+        
+        String[] parts = headerValue.split(";");
+        if (parts.length == 0) return;
+ 
+        // First part is always name=value
+        String[] nameValue = parts[0].trim().split("=", 2);
+        if (nameValue.length < 2) return;
+        String name  = nameValue[0].trim();
+        String value = nameValue[1].trim();
+ 
+        // Parse attributes from remaining parts
+        String path = "/";
+        long expiresAt = -1;
+ 
+        for (int i = 1; i < parts.length; i++) {
+            String attr = parts[i].trim();
+ 
+            // Ignore attributes without value
+            int eq = attr.indexOf('=');
+            if (eq == -1) continue;
+            String attrName = attr.substring(0, eq).trim();
+            String attrValue = attr.substring(eq + 1).trim();
+ 
+            if (attrName.equalsIgnoreCase("Path")) {
+                path = attrValue;
+            } else if (attrName.equalsIgnoreCase("Max-Age")) {
+                try {
+                    long maxAgeSeconds = Long.parseLong(attrValue);
+                    if (maxAgeSeconds <= 0) {
+                        // Max-Age=0 means delete the cookie
+                        removeCookie(host, name);
+                        return;
+                    }
+                    expiresAt = System.currentTimeMillis() + maxAgeSeconds * 1000L;
+                } catch (NumberFormatException ignored) {}
+            }
+        }
+ 
+        // Add or replace cookie
+        List<StoredCookie> hostCookies = cookieStore.computeIfAbsent(host, k -> new ArrayList<>());
+ 
+        // Remove old cookie with same name and path if present
+        final String finalPath = path; 
+        hostCookies.removeIf(c -> c.name.equals(name) && c.path.equals(finalPath));
+ 
+        // Store new cookie
+        hostCookies.add(new StoredCookie(name, value, path, expiresAt));
+    }
+ 
+    private void removeCookie(String host, String name) {
+        List<StoredCookie> hostCookies = cookieStore.get(host);
+        if (hostCookies != null) {
+            hostCookies.removeIf(c -> c.name.equals(name));
+        }
     }
 }

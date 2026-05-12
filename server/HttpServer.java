@@ -131,8 +131,32 @@ public class HttpServer {
             }
         }
 
+        // Parse the Cookie header into req.cookies so handlers can read them easily.
+        // The Cookie header looks like: "session=abc123; visits=5; theme=dark"
+        parseCookieHeader(req);
+
         return req;
     }
+
+
+    // Parses the Cookie request header and populates req.cookies.
+    private void parseCookieHeader(HttpRequest req) {
+        String cookieHeader = req.getHeader("Cookie");
+        if (cookieHeader == null || cookieHeader.isBlank()) return;
+ 
+        // Split by "; " to get individual name=value pairs
+        String[] pairs = cookieHeader.split(";");
+        for (String pair : pairs) {
+            pair = pair.trim();
+            int eq = pair.indexOf('=');
+            if (eq > 0) {
+                String name  = pair.substring(0, eq).trim();
+                String value = pair.substring(eq + 1).trim();
+                req.cookies.put(name, value);
+            }
+        }
+    }
+
 
     // Reads one CRLF-terminated line from the stream.
     // Returns the line without the trailing \r\n and null in end of file
