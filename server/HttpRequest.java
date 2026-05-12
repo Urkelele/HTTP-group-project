@@ -12,6 +12,9 @@ public class HttpRequest {
     public byte[] bodyBytes = new byte[0];
     public String body      = "";
 
+    // Cookies
+    public Map<String, String> cookies = new LinkedHashMap<>();
+
     //Helpers
 
     //Returns the value of a header (case-insensitive), or null if absent
@@ -20,6 +23,15 @@ public class HttpRequest {
             if (e.getKey().equalsIgnoreCase(name)) return e.getValue();
         }
         return null;
+    }
+
+    // Cookies
+    public String getCookie(String name) {
+        return cookies.get(name);
+    }
+
+    public boolean hasCookie(String name) {
+        return cookies.containsKey(name);
     }
 
     //Returns the Content-Type header value (lowercase), or empty string

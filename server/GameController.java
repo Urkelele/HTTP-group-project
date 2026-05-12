@@ -17,6 +17,12 @@ import java.util.concurrent.atomic.AtomicInteger;
  * DELETE /games/id -> delete a game
  * GET /games/:id/cover -> serve cover image
  * POST /games/:id/cover -> upload cover image
+ * 
+ * Cookies
+ * - GET /games sets a "visited" cookie the first time a client hits the API
+ * - All responses include a "visits" counter cookie that increments each request
+ * - Handlers use req.getCookie() to read cookies sent by the client
+ * - There is a cookie that remembers the last viewed game of the user
  */
 public class GameController {
 
@@ -107,6 +113,17 @@ public class GameController {
         List<String> jsons = new ArrayList<>();
         // Sort by id for consistent ordering
         games.entrySet().stream().sorted(Map.Entry.comparingByKey()).forEach(e -> jsons.add(e.getValue().toJson()));
+        
+        // Cookies
+        // Read how many times this client has called GET /games
+        int visits = readVisitCount(req);
+        visits++;
+
+        // Always update the visits counter cookie (expires in 1 hour, scoped to /games)
+        res.setCookie("visits", String.valueOf(visits), 3600, "/games");
+ 
+        Logger.info("Cookie: visits=" + visits + " for GET /games");
+     
         return res.status(200).json(JsonParser.buildArray(jsons));
     }
 
@@ -122,6 +139,18 @@ public class GameController {
 
         Game game = findGame(param);
         if (game == null) return notFound(res);
+
+        // Cookies remember the last viewed game
+        // Set a cookie so the client "remembers" which game they last viewed.
+        // Scoped to /games so it's only sent back to game endpoints, not to /
+        res.setCookie("lastViewed", String.valueOf(game.id), 86400, "/games");
+ 
+        // If we can read it back from the request, log it
+        String previouslyViewed = req.getCookie("lastViewed");
+        if (previouslyViewed != null && !previouslyViewed.equals(String.valueOf(game.id))) {
+            Logger.info("Cookie: client previously viewed game id=" + previouslyViewed + ", now viewing id=" + game.id);
+        }
+
         return res.status(200).json(game.toJson());
     }
 
@@ -197,8 +226,25 @@ public class GameController {
 
         Logger.info("Game deleted: [" + game.id + "] " + game.title);
 
+        // Cookies clear the lastViewed cookie if it was this game
+        String lastViewed = req.getCookie("lastViewed");
+        if (String.valueOf(game.id).equals(lastViewed)) {
+            res.setCookie("lastViewed", "", -1, "/games");
+        }
+
         // 204 must have empty body
         return res.status(204).json("");
+    }
+
+    // Cookie helpers
+    private int readVisitCount(HttpRequest req) {
+        String raw = req.getCookie("visits");
+        if (raw == null) return 0;
+        try {
+            return Integer.parseInt(raw);
+        } catch (NumberFormatException e) {
+            return 0;
+        }
     }
 
     /*
