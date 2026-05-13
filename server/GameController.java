@@ -19,8 +19,7 @@ import java.util.concurrent.atomic.AtomicInteger;
  * POST /games/:id/cover -> upload cover image
  * 
  * Cookies
- * - GET /games sets a "visited" cookie the first time a client hits the API
- * - All responses include a "visits" counter cookie that increments each request
+ * - Responses from GET /games include a "visits" counter cookie that increments each request
  * - Handlers use req.getCookie() to read cookies sent by the client
  * - There is a cookie that remembers the last viewed game of the user
  */
